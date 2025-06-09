@@ -1,0 +1,78 @@
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+    "formatters": {
+        "json": {
+            "()": "config.logging.formatters.json_formatter.JsonFormatter"
+        }
+    },
+    "handlers": {
+        "file": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": "/var/log/api/app.log",
+            "when": "midnight",
+            "interval": 1,
+            "backupCount": 30,
+            "formatter": "json"
+        },
+        "security": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": "/var/log/api/security.log",
+            "when": "midnight",
+            "interval": 1,
+            "backupCount": 90,
+            "formatter": "json"
+        },
+        "transaction": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": "/var/log/api/transactions.log",
+            "when": "midnight",
+            "interval": 1,
+            "backupCount": 90,
+            "formatter": "json"
+        },
+        "error": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": "/var/log/api/error.log",
+            "when": "midnight",
+            "interval": 1,
+            "backupCount": 90,
+            "formatter": "json"
+        },
+        "metrics": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "filename": "/var/log/api/metrics.log",
+            "when": "H",
+            "interval": 1,
+            "backupCount": 168,
+            "formatter": "json"
+        }
+    },
+    "loggers": {
+        "app": {
+            "level": "INFO",
+            "handlers": ["file"],
+            "propagate": false
+        },
+        "security": {
+            "level": "INFO",
+            "handlers": ["security"],
+            "propagate": false
+        },
+        "transaction": {
+            "level": "INFO",
+            "handlers": ["transaction"],
+            "propagate": false
+        },
+        "error": {
+            "level": "ERROR",
+            "handlers": ["error"],
+            "propagate": false
+        },
+        "metrics": {
+            "level": "INFO",
+            "handlers": ["metrics"],
+            "propagate": false
+        }
+    }
+}

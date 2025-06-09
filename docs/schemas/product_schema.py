@@ -1,0 +1,1 @@
+# product_schema.py
