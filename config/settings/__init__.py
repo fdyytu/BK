@@ -1,6 +1,9 @@
 from functools import lru_cache
 from typing import Dict, Any
-from pydantic import BaseSettings
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    from pydantic import BaseSettings
 from .app import AppSettings
 from .database import DatabaseSettings
 from .cache import CacheSettings

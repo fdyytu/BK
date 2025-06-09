@@ -1,120 +1,208 @@
-from fastapi import FastAPI, Depends, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from flask import Flask as FlaskApp
-from django.core.asgi import get_asgi_application
-from django.conf import settings
-import django
-from typing import List
-import datetime
-import logging
 import os
 import sys
-from watchfiles import watch
+import logging
+import asyncio
+from datetime import datetime
+from typing import List, Optional
 
-# Konfigurasi logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+# FastAPI imports
+from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+# Uvicorn untuk server
+import uvicorn
+from uvicorn.config import Config
+
+# Import konfigurasi lokal
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+try:
+    from config.settings.base import *
+except ImportError:
+    # Fallback ke konfigurasi sederhana jika ada masalah import
+    DEBUG = True
+    SECRET_KEY = "fallback-secret-key"
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+try:
+    from config.logging.logger import setup_logger
+except ImportError:
+    # Fallback logger sederhana
+    def setup_logger(name):
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.INFO)
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        return logger
+
+# Setup logging
+logger = setup_logger(__name__)
+
+# Inisialisasi FastAPI app
+app = FastAPI(
+    title="BK API Server",
+    description="Backend API untuk aplikasi BK",
+    version="1.0.0",
+    debug=DEBUG
 )
-logger = logging.getLogger(__name__)
 
-# Konfigurasi watchfiles untuk monitoring perubahan file
-WATCHED_DIRECTORIES = [
-    "./routes",
-    "./models",
-    "./services",
-    "./config",
-    "./utils"
-]
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Sesuaikan dengan domain yang diizinkan
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-def log_file_change(changed_files):
-    """Mencatat file yang berubah ke log"""
-    for change_type, file_path in changed_files:
-        logger.info(f"Terdeteksi perubahan: {change_type} - {file_path}")
-        
-# Kelas untuk menangani reload
-class AutoReloader:
-    def __init__(self, app):
-        self.app = app
-        self.last_reload = datetime.datetime.utcnow()
-        
-    async def watch_files(self):
-        """Memantau perubahan file"""
-        try:
-            async for changes in watch(*WATCHED_DIRECTORIES, recursive=True):
-                current_time = datetime.datetime.utcnow()
-                # Mencegah multiple reload dalam 2 detik
-                if (current_time - self.last_reload).total_seconds() > 2:
-                    log_file_change(changes)
-                    self.last_reload = current_time
-                    # Reload aplikasi
-                    self.reload_app()
-        except Exception as e:
-            logger.error(f"Error dalam pemantauan file: {str(e)}")
+# Middleware untuk logging request
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = datetime.utcnow()
+    
+    # Log request
+    logger.info(f"Request: {request.method} {request.url}")
+    
+    # Process request
+    response = await call_next(request)
+    
+    # Log response time
+    process_time = (datetime.utcnow() - start_time).total_seconds()
+    logger.info(f"Response: {response.status_code} - Time: {process_time:.3f}s")
+    
+    return response
 
-    def reload_app(self):
-        """Melakukan reload aplikasi"""
-        logger.info(f"[{datetime.datetime.utcnow()}] Memulai reload aplikasi...")
-        try:
-            # Reload modul-modul yang berubah
-            for module in list(sys.modules.keys()):
-                if any(module.startswith(dir_name) for dir_name in WATCHED_DIRECTORIES):
-                    try:
-                        reload(sys.modules[module])
-                        logger.info(f"Berhasil reload modul: {module}")
-                    except:
-                        pass
-            logger.info("Reload aplikasi selesai")
-        except Exception as e:
-            logger.error(f"Error saat reload: {str(e)}")
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Endpoint untuk mengecek status server"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": "1.0.0"
+    }
 
-# Inisialisasi aplikasi seperti sebelumnya...
-[kode sebelumnya tetap sama]
+# Root endpoint
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "message": "BK API Server berjalan dengan baik",
+        "timestamp": datetime.utcnow().isoformat(),
+        "endpoints": {
+            "health": "/health",
+            "docs": "/docs",
+            "redoc": "/redoc"
+        }
+    }
+
+# Import dan register routes
+try:
+    from routes import register_routes
+    register_routes(app)
+    logger.info("Routes berhasil didaftarkan")
+except ImportError as e:
+    logger.warning(f"Routes tidak dapat dimuat: {e}")
+    logger.info("Server akan berjalan tanpa routes tambahan")
+
+# Exception handler
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    logger.error(f"HTTP Exception: {exc.status_code} - {exc.detail}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": True,
+            "message": exc.detail,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {str(exc)}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": True,
+            "message": "Internal server error",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+
+# Startup event
+@app.on_event("startup")
+async def startup_event():
+    logger.info("=== BK API Server Starting ===")
+    logger.info(f"Debug mode: {DEBUG}")
+    logger.info(f"Base directory: {BASE_DIR}")
+    logger.info("Server siap menerima request")
+
+# Shutdown event
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("=== BK API Server Shutting Down ===")
 
 if __name__ == "__main__":
-    import uvicorn
-    from uvicorn.config import Config
-    import asyncio
-    
     # Informasi startup
-    current_time = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    current_user = os.getenv("USER", "fdyytu")
+    current_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    current_user = os.getenv("USER", "system")
     
-    print(f"\n=== Server Status ===")
+    print(f"\n=== BK API Server ===")
     print(f"📅 Waktu Start (UTC): {current_time}")
     print(f"👤 User: {current_user}")
+    print(f"🐍 Python: {sys.version}")
+    print(f"📁 Base Dir: {BASE_DIR}")
+    
+    # Direktori yang akan dimonitor untuk hot reload
+    reload_dirs = [
+        "./routes",
+        "./models", 
+        "./services",
+        "./config",
+        "./utils"
+    ]
+    
     print("\n🔍 Monitoring Direktori:")
-    for dir_path in WATCHED_DIRECTORIES:
-        print(f"   └── {dir_path}")
+    for dir_path in reload_dirs:
+        if os.path.exists(dir_path):
+            print(f"   ✅ {dir_path}")
+        else:
+            print(f"   ❌ {dir_path} (tidak ditemukan)")
     
-    print("\n🚀 Server mulai dengan konfigurasi:")
-    print("├── FastAPI: API utama dan endpoints")
-    print("├── Django: Admin panel dan reporting")
-    print("└── Flask: Payment gateway dan webhooks")
+    print("\n🚀 Server Configuration:")
+    print("├── Framework: FastAPI")
+    print("├── Host: 0.0.0.0")
+    print("├── Port: 8000")
+    print("├── Hot Reload: Enabled")
+    print("└── Debug Mode: " + ("Enabled" if DEBUG else "Disabled"))
     
-    # Konfigurasi uvicorn dengan hot reload
+    print("\n📚 Available Endpoints:")
+    print("├── API Docs: http://localhost:8000/docs")
+    print("├── ReDoc: http://localhost:8000/redoc")
+    print("├── Health Check: http://localhost:8000/health")
+    print("└── Root: http://localhost:8000/")
+    
+    # Konfigurasi uvicorn
     config = Config(
-        "server:fastapi_app",
+        app="server:app",
         host="0.0.0.0",
         port=8000,
         reload=True,
-        reload_dirs=WATCHED_DIRECTORIES,
-        log_level="info"
+        reload_dirs=[d for d in reload_dirs if os.path.exists(d)],
+        log_level="info",
+        access_log=True
     )
     
-    # Inisialisasi AutoReloader
-    reloader = AutoReloader(fastapi_app)
-    
-    # Jalankan server dengan fitur reload
-    server = uvicorn.Server(config)
-    
-    # Jalankan pemantau file dalam task terpisah
-    async def run_server():
-        await asyncio.gather(
-            server.serve(),
-            reloader.watch_files()
-        )
-    
-    # Jalankan server dengan asyncio
-    asyncio.run(run_server())
+    # Jalankan server
+    try:
+        server = uvicorn.Server(config)
+        asyncio.run(server.serve())
+    except KeyboardInterrupt:
+        print("\n\n🛑 Server dihentikan oleh user")
+    except Exception as e:
+        print(f"\n\n❌ Error menjalankan server: {e}")
+        logger.error(f"Server error: {e}")
