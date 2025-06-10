@@ -1,0 +1,60 @@
+{
+    "application": {
+        "debug": false,
+        "environment": "production",
+        "host": "0.0.0.0",
+        "port": 8000,
+        "workers": 4
+    },
+    "database": {
+        "host": "db.example.com",
+        "port": 5432,
+        "database": "digital_platform_prod",
+        "username": "prod_user",
+        "password": "${DB_PASSWORD}",
+        "pool_size": 20,
+        "max_overflow": 30,
+        "ssl_mode": "require"
+    },
+    "cache": {
+        "backend": "redis",
+        "host": "redis.example.com",
+        "port": 6379,
+        "password": "${REDIS_PASSWORD}",
+        "default_ttl": 3600
+    },
+    "security": {
+        "secret_key": "${SECRET_KEY}",
+        "jwt_expiration": 3600,
+        "password_min_length": 8
+    },
+    "logging": {
+        "level": "INFO",
+        "handlers": ["file"],
+        "file_handler": {
+            "filename": "/var/log/digital-platform/app.log"
+        }
+    },
+    "payment": {
+        "gateways": {
+            "midtrans": {
+                "sandbox": false,
+                "server_key": "${MIDTRANS_SERVER_KEY}",
+                "client_key": "${MIDTRANS_CLIENT_KEY}"
+            }
+        }
+    },
+    "monitoring": {
+        "enabled": true,
+        "alerting": {
+            "enabled": true
+        },
+        "tracing": {
+            "enabled": true
+        }
+    },
+    "rate_limit": {
+        "enabled": true,
+        "storage": "redis"
+    }
+}

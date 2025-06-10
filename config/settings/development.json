@@ -1,0 +1,43 @@
+{
+    "application": {
+        "debug": true,
+        "environment": "development",
+        "host": "127.0.0.1",
+        "port": 8000,
+        "workers": 1
+    },
+    "database": {
+        "host": "localhost",
+        "port": 5432,
+        "database": "digital_platform_dev",
+        "username": "dev_user",
+        "password": "dev_password",
+        "pool_size": 5,
+        "ssl_mode": "disable"
+    },
+    "cache": {
+        "backend": "memory",
+        "default_ttl": 300
+    },
+    "security": {
+        "jwt_expiration": 7200,
+        "password_min_length": 6
+    },
+    "logging": {
+        "level": "DEBUG",
+        "handlers": ["console", "file"]
+    },
+    "payment": {
+        "gateways": {
+            "midtrans": {
+                "sandbox": true
+            }
+        }
+    },
+    "monitoring": {
+        "enabled": true,
+        "tracing": {
+            "enabled": true
+        }
+    }
+}

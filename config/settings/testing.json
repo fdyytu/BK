@@ -1,0 +1,42 @@
+{
+    "application": {
+        "debug": true,
+        "environment": "testing",
+        "host": "127.0.0.1",
+        "port": 8001
+    },
+    "database": {
+        "host": "localhost",
+        "port": 5432,
+        "database": "digital_platform_test",
+        "username": "test_user",
+        "password": "test_password",
+        "pool_size": 2
+    },
+    "cache": {
+        "backend": "memory"
+    },
+    "security": {
+        "jwt_expiration": 300,
+        "password_min_length": 4
+    },
+    "logging": {
+        "level": "WARNING",
+        "handlers": ["console"]
+    },
+    "payment": {
+        "gateways": {
+            "midtrans": {
+                "sandbox": true,
+                "server_key": "test_server_key",
+                "client_key": "test_client_key"
+            }
+        }
+    },
+    "monitoring": {
+        "enabled": false
+    },
+    "rate_limit": {
+        "enabled": false
+    }
+}
